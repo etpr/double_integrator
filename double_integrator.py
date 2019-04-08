@@ -84,3 +84,11 @@ class DoubleIntegrator:
             t += self.dt
 
         return t_f, t_s, x_1s, x_2s, X, U, S, T
+
+    def draw(self, X, S):
+        import matplotlib.pyplot as plt
+        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(S, 0)), S > 0)
+        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'r')
+        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(S, 0)), S < 0)
+        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'b')
+        plt.plot(X[np.isclose(S, 0), 0], X[np.isclose(S, 0), 1], 'k')

@@ -12,7 +12,7 @@ class DoubleIntegrator:
         else:
             return (x_2 * x_2 - x_2f * x_2f) / (2 * np.sign(x_2 - x_2f) * u_lim) - x_1f + x_1
 
-    def optimal_controller(self, x_10, x_20, x_1f, x_2f, u_lim=None):
+    def time_optimal_solution(self, x_10, x_20, x_1f, x_2f, u_lim=None):
         if u_lim is not None:
             if u_lim > self.u_sys_lim:
                 raise Exception("the provided control limit is above the system limit")
@@ -53,9 +53,8 @@ class DoubleIntegrator:
         if x_10 == x_1f and x_20 == x_2f:
             return 0, 0, x_10, x_20, np.array([[x_10, x_20]]), np.array([0]), np.array([0]), np.array([0])
 
-        s0, t_f, t_s, x_1s, x_2s, u_opt_1, u_opt_2, u_max = self.optimal_controller(x_10, x_20, x_1f, x_2f, u_lim)
+        s0, t_f, t_s, x_1s, x_2s, u_opt_1, u_opt_2, u_max = self.time_optimal_solution(x_10, x_20, x_1f, x_2f, u_lim)
 
-        # compute optimal state and action trajectories
         t = 0
         x_1 = x_10
         x_2 = x_20
@@ -88,7 +87,7 @@ class DoubleIntegrator:
 
         return t_f, t_s, x_1s, x_2s, X, U, S, T
 
-    def comp_limit_from_final_time(self, x_10, x_20, x_1f, x_2f, t_f, s_0):
+    def control_limit_from_final_time(self, x_10, x_20, x_1f, x_2f, t_f, s_0):
         if s_0 >= 0:
             u_lim = (np.sqrt(2) * np.sqrt(2 * (x_10 - x_1f) * (x_10 - x_1f) + 2 * (x_10 - x_1f) * x_20 * t_f + 2 * (
                     x_10 - x_1f) * x_2f * t_f + x_20 * x_20 * t_f * t_f + x_2f * x_2f * t_f * t_f) + 2 * (
@@ -100,23 +99,124 @@ class DoubleIntegrator:
 
         return u_lim
 
-    def draw(self, X, S):
-        import matplotlib.pyplot as plt
-        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(S, 0)), S > 0)
-        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'r')
-        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(S, 0)), S < 0)
-        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'b')
-        plt.plot(X[np.isclose(S, 0), 0], X[np.isclose(S, 0), 1], 'k')
+    def energy_optimal_solution(self, x_10, x_20, x_1f, x_2f, t_f, u_lim=None):
+        if u_lim is not None:
+            if u_lim > self.u_sys_lim:
+                raise Exception("the provided control limit is above the system limit")
+            u_max = u_lim
+            u_min = -u_lim
+        else:
+            u_max = self.u_sys_lim
+            u_min = -self.u_sys_lim
 
-    def animate(self, X, S, T):
-        import matplotlib.pyplot as plt
-        for x, s, t in zip(X, S, T):
-            if np.isclose(s, 0):
-                plt.plot(x[0], x[1], 'k.')
-            elif s > 0:
-                plt.plot(x[0], x[1], 'r.')
+        s0 = self.switch_criteria(x_10, x_20, x_1f, x_2f, u_max)
+        if s0 > 0:
+            a = u_min
+            b = -x_2f - t_f * u_min + x_20
+            c = 0.5 * u_min * (x_2f + t_f * u_min - x_20) * (x_2f + t_f * u_min - x_20) - t_f * (
+                x_2f + t_f * u_min) + 0.5 * t_f * t_f * u_min - x_10 + x_1f
+
+            t_s2 = (-b - np.sqrt(b * b - 4 * a * c)) / (2 * a)
+            t_s1 = (x_2f + t_f * u_min - x_20 - t_s2 * u_min) / u_min
+            x_1s1 = 0.5 * t_s1 * t_s1 * u_min + x_20 * t_s1 + x_10
+            x_2s1 = u_min * t_s1 + x_20
+            x_1s2 = x_1s1 + (t_s2 - t_s1) * x_2s1
+            x_2s2 = x_2s1
+
+            u_opt_1 = u_min
+            u_opt_2 = 0
+            u_opt_3 = u_max
+        elif s0 < 0:
+            a = u_max
+            b = -x_2f - t_f * u_max + x_20
+            c = 0.5 * u_max * (x_2f + t_f * u_max - x_20) * (x_2f + t_f * u_max - x_20) - t_f * (
+                x_2f + t_f * u_max) + 0.5 * t_f * t_f * u_max - x_10 + x_1f
+
+            t_s2 = (-b + np.sqrt(b * b - 4 * a * c)) / (2 * a)
+            t_s1 = (x_2f + t_f * u_max - x_20 - t_s2 * u_max) / u_max
+            x_1s1 = 0.5 * t_s1 * t_s1 * u_max + x_20 * t_s1 + x_10
+            x_2s1 = u_max * t_s1 + x_20
+            x_1s2 = x_1s1 + (t_s2 - t_s1) * x_2s1
+            x_2s2 = x_2s1
+
+            u_opt_1 = u_max
+            u_opt_2 = 0
+            u_opt_3 = u_min
+        else:
+            raise Exception("This case is not implemented yet")
+
+        return s0, t_f, t_s1, t_s2, x_1s1, x_2s1, x_1s2, x_2s2, u_opt_1, u_opt_2, u_opt_3, u_max
+
+    def energy_opt_control(self, x_10, x_20, x_1f, x_2f, t_f, u_lim=None):
+            if x_10 == x_1f and x_20 == x_2f:
+                return 0, 0, 0, x_10, x_20, x_10, x_20, np.array([[x_10, x_20]]), np.array([0]), np.array([0]), np.array([0])
+
+            s0, t_f, t_s1, t_s2, x_1s1, x_2s1, x_1s2, x_2s2, u_opt_1, u_opt_2, u_opt_3, u_max = \
+                self.energy_optimal_solution(x_10, x_20, x_1f, x_2f, t_f, u_lim)
+
+            # c1 and c2 are parameters of the switching function s(t) = -c1 t + c2
+            if s0 > 0:
+                c1 = -2.0 / (t_s1 - t_s2)
+                c2 = 1 + c1 * t_s1
             else:
+                c1 = 2.0 / (t_s1 - t_s2)
+                c2 = -1 + c1 * t_s1
+
+            t = 0
+            s0 = c2
+            x_1 = x_10
+            x_2 = x_20
+            u = u_opt_1
+
+            X = np.array([[x_1, x_2]])
+            U = np.array([u])
+            S = np.array([s0])
+            T = np.array([t])
+
+            while t <= t_f:
+                if t < t_s1:
+                    u = u_opt_1
+                    x_2 = u * t + x_20
+                    x_1 = 0.5 * t * t * u + x_20 * t + x_10
+                elif t < t_s2:
+                    u = u_opt_2
+                    t_d = t - t_s1
+                    x_2 = u * t_d + x_2s1
+                    x_1 = 0.5 * t_d * t_d * u + x_2s1 * t_d + x_1s1
+                else:
+                    u = u_opt_3
+                    t_d = t - t_s2
+                    x_2 = u * t_d + x_2s2
+                    x_1 = 0.5 * t_d * t_d * u + x_2s2 * t_d + x_1s2
+
+                s = -c1 * t + c2
+
+                X = np.append(X, np.array([[x_1, x_2]]), axis=0)
+                U = np.append(U, u)
+                S = np.append(S, s)
+                T = np.append(T, t)
+
+                t += self.dt
+
+            return t_f, t_s1, t_s2, x_1s1, x_2s1, x_1s2, x_2s2, X, U, S, T
+
+    def draw(self, X, U):
+        import matplotlib.pyplot as plt
+        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(U, 0)), U > 0)
+        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'b')
+        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(U, 0)), U < 0)
+        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'r')
+        plt.plot(X[np.isclose(U, 0), 0], X[np.isclose(U, 0), 1], 'k')
+
+    def animate(self, X, U, T):
+        import matplotlib.pyplot as plt
+        for x, u, t in zip(X, U, T):
+            if np.isclose(u, 0):
+                plt.plot(x[0], x[1], 'k.')
+            elif u > 0:
                 plt.plot(x[0], x[1], 'b.')
+            else:
+                plt.plot(x[0], x[1], 'r.')
 
             plt.draw()
             plt.pause(1e-12)

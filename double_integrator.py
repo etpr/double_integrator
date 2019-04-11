@@ -46,8 +46,8 @@ class DoubleIntegrator:
 
     def time_opt_control(self, x_0, x_f, u_lim=None):
         if x_0[0] == x_f[0] and x_0[1] == x_f[1]:  # trivial case: start == goal
-            return True, Trajectory(t_f=0, t_s=0, x_s=x_0, X=np.array([x_0]), U=np.array([0]), S=np.array([0]),
-                                    T=np.array([0]))
+            return True, Trajectory(t_f=0, t_s=0, x_s=x_0, x_0=x_0, x_f=x_f, X=np.array([x_0]), U=np.array([0]),
+                                    S=np.array([0]), T=np.array([0]))
 
         s0, t_f, t_s, x_s, u_opt, u_max = self.time_optimal_solution(x_0, x_f, u_lim)
 
@@ -80,7 +80,7 @@ class DoubleIntegrator:
 
             t += self.dt
 
-        return True, Trajectory(t_f=t_f, t_s=t_s, x_s=x_s, X=X, U=U, S=S, T=T)
+        return True, Trajectory(t_f=t_f, t_s=t_s, x_s=x_s, x_0=x_0, x_f=x_f, X=X, U=U, S=S, T=T)
 
     def control_limit_from_final_time(self, x_0, x_f, t_f, s_0):
         if s_0 >= 0:
@@ -152,8 +152,8 @@ class DoubleIntegrator:
 
     def fuel_opt_control(self, x_0, x_f, t_f, u_lim=None):
             if x_0[0] == x_f[0] and x_0[1] == x_f[1]:  # trivial case: start == goal
-                return True, Trajectory(t_f=0, t_s=0, x_s=x_0, X=np.array([x_0]), U=np.array([0]), S=np.array([0]),
-                                        T=np.array([0]))
+                return True, Trajectory(t_f=0, t_s=0, x_s=x_0, x_0=x_0, x_f=x_f, X=np.array([x_0]), U=np.array([0]),
+                                        S=np.array([0]), T=np.array([0]))
 
             t_f_opt = self.time_optimal_solution(x_0, x_f , u_lim)[1]
             if t_f < t_f_opt:
@@ -208,44 +208,12 @@ class DoubleIntegrator:
 
                 t += self.dt
 
-            return True, Trajectory(t_f=t_f, t_s=t_s, x_s=x_s, X=X, U=U, S=S, T=T)
-
-    def energy_optimal_solution(self, x_0, x_f, u_lim=None):
-        if u_lim is not None:
-            if u_lim > self.u_sys_lim:
-                raise Exception("the provided control limit is above the system limit")
-            u_max = u_lim
-            u_min = -u_lim
-        else:
-            u_max = self.u_sys_lim
-            u_min = -self.u_sys_lim
-
-        s0 = self.switch_criteria(x_0, x_f, u_max)
-
-        if s0 > 0:
-            t_s = (x_0[1] + np.sqrt(0.5 * x_0[1] * x_0[1] + u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] - u_max * x_f[0])) / u_max
-            t_f = (x_0[1] + x_f[1] + 2 * np.sqrt(
-                0.5 * x_0[1] * x_0[1] + u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] - u_max * x_f[0])) / u_max
-            x_s = np.array([0.5 * t_s * t_s * u_min + x_0[1] * t_s + x_0[0], u_min * t_s + x_0[1]])
-            u_opt = [u_min, u_max]
-        elif s0 < 0:
-            t_s = (-x_0[1] + np.sqrt(0.5 * x_0[1] * x_0[1] - u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] + u_max * x_f[0])) / u_max
-            t_f = (-x_0[1] + -x_f[1] + 2 * np.sqrt(
-                0.5 * x_0[1] * x_0[1] - u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] + u_max * x_f[0])) / u_max
-            x_s = np.array([0.5 * t_s * t_s * u_max + x_0[1] * t_s + x_0[0], u_max * t_s + x_0[1]])
-            u_opt = [u_max, u_min]
-        else:
-            t_s = 0
-            t_f = (np.abs(x_0[1]) + np.abs(x_f[1])) / u_max
-            x_s = np.copy(x_0)
-            u_opt = [-np.sign(x_0[1]) * u_max]
-
-        return s0, t_f, t_s, x_s, u_opt, u_max
+            return True, Trajectory(t_f=t_f, t_s=t_s, x_s=x_s, x_0=x_0, x_f=x_f, X=X, U=U, S=S, T=T)
 
     def energy_opt_control(self, x_0, x_f, t_f, u_lim=None):
         if x_0[0] == x_f[0] and x_0[1] == x_f[1]:  # trivial case: start == goal
-            return True, Trajectory(t_f=0, t_s=0, x_s=x_0, X=np.array([x_0]), U=np.array([0]), S=np.array([0]),
-                                    T=np.array([0]))
+            return True, Trajectory(t_f=0, t_s=0, x_s=x_0, x_0=x_0, x_f=x_f, X=np.array([x_0]), U=np.array([0]),
+                                    S=np.array([0]), T=np.array([0]))
 
         if u_lim is not None:
             if u_lim > self.u_sys_lim:
@@ -285,11 +253,11 @@ class DoubleIntegrator:
 
             t += self.dt
 
-        return True, Trajectory(t_f=t_f, X=X, U=U, T=T)
+        return True, Trajectory(t_f=t_f, X=X, x_0=x_0, x_f=x_f,  U=U, T=T)
 
 
 class Trajectory:
-    def __init__(self, t_f=None, t_s=None, x_s=None, X=None, U=None, S=None, T=None):
+    def __init__(self, t_f=None, t_s=None, x_s=None, x_0=None, x_f=None, X=None, U=None, S=None, T=None):
         self.t_f = t_f
         self.t_s = t_s
         self.x_s = x_s
@@ -297,14 +265,47 @@ class Trajectory:
         self.U = U
         self.S = S
         self.T = T
+        self.x_0 = x_0
+        self.x_f = x_f
 
-    def draw(self):
+    def plot_phase(self, resize=True):
         import matplotlib.pyplot as plt
+        if resize:
+            ax = plt.gca()
+            ax.set_aspect('equal')
+            ax.grid(True, which='both')
+            lim = np.max(np.abs(self.X)) * 1.2
+            plt.ylim([-lim, lim])
+            plt.xlim([-lim, lim])
+            plt.xlabel('x')
+            plt.ylabel('y')
+
         plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(self.U, 0)), self.U > 0)
         plt.plot(self.X[plot_idx, 0], self.X[plot_idx, 1], 'b')
         plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(self.U, 0)), self.U < 0)
         plt.plot(self.X[plot_idx, 0], self.X[plot_idx, 1], 'r')
         plt.plot(self.X[np.isclose(self.U, 0), 0], self.X[np.isclose(self.U, 0), 1], 'k')
+
+    def plot_traj(self):
+        import matplotlib.pyplot as plt
+        ax = plt.subplot(411)
+        ax.grid(True, which='both')
+        plt.ylabel('x_1')
+        plt.plot(self.T, self.X[:, 0])
+        ax = plt.subplot(412)
+        ax.grid(True, which='both')
+        plt.ylabel('x_2')
+        plt.plot(self.T, self.X[:, 1])
+        ax = plt.subplot(413)
+        ax.grid(True, which='both')
+        plt.plot(self.T, self.U)
+        plt.ylabel('u')
+        if self.S is not None:
+            ax = plt.subplot(414)
+            ax.grid(True, which='both')
+            plt.plot(self.T, self.S)
+            plt.xlabel('t')
+            plt.ylabel('s')
 
     def animate(self):
         import matplotlib.pyplot as plt

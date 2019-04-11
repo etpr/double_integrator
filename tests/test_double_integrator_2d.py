@@ -4,6 +4,7 @@ from double_integrator_2d import DoubleIntegrator2D
 from random import random, seed
 
 N_RAND = 100
+VIS_TEST = False
 
 
 def test_simple():
@@ -44,7 +45,26 @@ def test_final_state():
             assert np.linalg.norm(y_0 - traj_y.X[0]) < 1e-2
 
     print(success, ' successful trials from ', N_RAND)
-#
+
+
+def test_visualization():
+    x_0 = np.array([0.0, 0.5])
+    x_f = np.array([1.0, 0.0])
+    y_0 = np.array([0.0, 0.0])
+    y_f = np.array([1.0, 0.5])
+
+    di = DoubleIntegrator2D()
+    res, traj_x, traj_y = di.steer(x_0=x_0, x_f=x_f, y_0=y_0, y_f=y_f)
+
+    plt.figure(1)
+    di.plot_xy(traj_x, traj_y)
+
+    plt.figure(2)
+    di.plot_traj(traj_x, traj_y)
+
+    if VIS_TEST:
+        plt.show()
+
 # def test_equal_start_end():
 #     x_0 = np.array([0.0, 1.0])
 #     x_f = np.array([0.0, 1.0])

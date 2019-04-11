@@ -15,15 +15,17 @@ class DoubleIntegrator2D:
             res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f)
             n = len(traj_y.T)
             X = np.repeat(np.array([[x_0]]), n, axis=0)
-            res, traj_x = True, Trajectory(t_f=t_f_y, t_s=x_0, x_s=x_0, X=X, U=np.zeros(n), S=np.zeros(n),
-                                           T=traj_y.T), traj_y
+            traj_x = Trajectory(t_f=t_f_y, t_s=0, x_s=y_0, x_0=x_0, x_f=x_f, X=X, U=np.zeros(n), S=np.zeros(n),
+                                           T=traj_y.T)
+            res, traj_x = True, traj_x, traj_y
 
         elif np.isclose(t_f_y, 0):  # movement only along x direction
             res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f)
             n = len(traj_x.T)
             Y = np.repeat(np.array([[y_0]]), n, axis=0)
-            res, traj_y = True, traj_x, Trajectory(t_f=t_f_x, t_s=y_0, x_s=y_0, X=Y, U=np.zeros(n), S=np.zeros(n),
+            traj_y = Trajectory(t_f=t_f_x, t_s=0, x_s=y_0, x_0=y_0, x_f=y_f, X=Y, U=np.zeros(n), S=np.zeros(n),
                                                    T=traj_x.T)
+            res, traj_y = True, traj_x, traj_y
 
         elif np.isclose(t_f_x, t_f_y):  # x and y motion take same amount of time
             res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f)
@@ -53,6 +55,11 @@ class DoubleIntegrator2D:
             if res:
                 return True, traj_x, traj_y
 
+            # case 4: fuel optimal control with t_f_y
+            res, traj_x = self.di_x.fuel_opt_control(x_0=x_0, x_f=x_f, t_f=t_f_y)
+            if res:
+                return True, traj_x, traj_y
+
             # no feasible trajectory found
             return False, None, None
 
@@ -79,8 +86,35 @@ class DoubleIntegrator2D:
             if res:
                 return True, traj_x, traj_y
 
+            # case 4: fuel optimal control with t_f_x
+            res, traj_y = self.di_y.fuel_opt_control(x_0=y_0, x_f=y_f, t_f=t_f_x)
+            if res:
+                return True, traj_x, traj_y
+
             # no feasible trajectory found
             return False, None, None
 
-    def draw(self):
-        pass
+    def plot_xy(self, traj_x, traj_y, resize=True):
+        import matplotlib.pyplot as plt
+        if resize:
+            ax = plt.gca()
+            ax.set_aspect('equal')
+            ax.grid(True, which='both')
+            lim = np.max(np.abs(np.concatenate([traj_x.X[:, 0], traj_y.X[:, 0]]))) * 1.2
+            plt.ylim([-lim, lim])
+            plt.xlim([-lim, lim])
+            plt.xlabel('x')
+            plt.ylabel('y')
+
+        plt.plot(traj_x.X[:, 0], traj_y.X[:, 0])
+        delta = 0.1
+        plt.plot(traj_x.x_0[0], traj_y.x_0[0], '.c')
+        plt.plot(traj_x.x_f[0], traj_y.x_f[0], '.g')
+        plt.arrow(traj_x.x_0[0], traj_y.x_0[0], traj_x.x_0[1],
+                  delta * (traj_y.x_0[1] - traj_y.x_0[0]), color='c', width=0.01)
+        plt.arrow(traj_x.x_f[0], traj_y.x_f[0], delta * traj_x.x_f[1],
+                  delta * traj_y.x_f[1], color='g', width=0.01)
+
+    def plot_traj(self, traj_x, traj_y):
+        traj_x.plot_traj()
+        traj_y.plot_traj()

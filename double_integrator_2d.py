@@ -1,5 +1,5 @@
 import numpy as np
-from double_integrator import DoubleIntegrator
+from double_integrator import DoubleIntegrator, Trajectory
 
 
 class DoubleIntegrator2D:
@@ -7,63 +7,80 @@ class DoubleIntegrator2D:
         self.di_x = DoubleIntegrator(u_sys_lim, dt)
         self.di_y = DoubleIntegrator(u_sys_lim, dt)
 
-    def steer(self, x_10, x_20, x_1f, x_2f, y_10, y_20, y_1f, y_2f):
-        s_x0, t_f_x = self.di_x.optimal_controller(x_10=x_10, x_20=x_20, x_1f=x_1f, x_2f=x_2f)[0:2]
-        s_y0, t_f_y = self.di_y.optimal_controller(x_10=y_10, x_20=y_20, x_1f=y_1f, x_2f=y_2f)[0:2]
+    def steer(self, x_0, x_f, y_0, y_f):
+        s_x0, t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f)[0:2]
+        s_y0, t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f)[0:2]
 
-        if np.isclose(t_f_x, 0):
-            t_f_y, t_s_y, y_1s, y_2s, Y, U_y, S_y, T_y = self.di_y.time_opt_control(x_10=y_10, x_20=y_20, x_1f=y_1f,
-                                                                                    x_2f=y_2f)
-            n = len(T_y)
-            X = np.repeat(np.array([[x_10, x_20]]), n, axis=0)
-            t_f_x, t_s_x, y_1s, y_2s, X, U_x, S_x, T_x = t_f_y, 0, x_10, x_20, X, np.zeros(n), np.zeros(n), T_y
-        elif np.isclose(t_f_y, 0):
-            t_f_x, t_s_x, y_1s, y_2s, X, U_x, S_x, T_x = self.di_x.time_opt_control(x_10=x_10, x_20=x_20, x_1f=x_1f,
-                                                                                    x_2f=x_2f)
-            n = len(T_x)
-            Y = np.repeat(np.array([[y_10, y_20]]), n, axis=0)
-            t_f_y, t_s_y, y_1s, y_2s, Y, U_y, S_y, T_y = t_f_x, 0, y_10, y_20, Y, np.zeros(n), np.zeros(n), T_x
-        elif np.isclose(t_f_x, t_f_y):
-            t_f_x, t_s_x, y_1s, y_2s, X, U_x, S_x, T_x = self.di_x.time_opt_control(x_10=x_10, x_20=x_20, x_1f=x_1f,
-                                                                                    x_2f=x_2f)
-            t_f_y, t_s_y, y_1s, y_2s, Y, U_y, S_y, T_y = self.di_y.time_opt_control(x_10=y_10, x_20=y_20, x_1f=y_1f,
-                                                                                    x_2f=y_2f)
-        elif t_f_x < t_f_y:
-            u_lim_new = self.di_x.comp_limit_from_final_time(x_10=x_10, x_20=x_20, x_1f=x_1f, x_2f=x_2f, t_f=t_f_y,
-                                                             s_0=s_x0)
-            t_f_x = self.di_x.optimal_controller(x_10=x_10, x_20=x_20, x_1f=x_1f, x_2f=x_2f, u_lim=u_lim_new)[1]
+        if np.isclose(t_f_x, 0):  # movement only along y direction
+            res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f)
+            n = len(traj_y.T)
+            X = np.repeat(np.array([[x_0]]), n, axis=0)
+            res, traj_x = True, Trajectory(t_f=t_f_y, t_s=x_0, x_s=x_0, X=X, U=np.zeros(n), S=np.zeros(n),
+                                           T=traj_y.T), traj_y
 
-            if not np.isclose(t_f_x, t_f_y):
-                u_lim_new = self.di_x.comp_limit_from_final_time(x_10=x_10, x_20=x_20, x_1f=x_1f, x_2f=x_2f, t_f=t_f_y,
-                                                                 s_0=-s_x0)
-                if u_lim_new > 0 and u_lim_new < self.di_x.u_sys_lim:
-                    t_f_x = self.di_x.optimal_controller(x_10=x_10, x_20=x_20, x_1f=x_1f, x_2f=x_2f, u_lim=u_lim_new)[1]
+        elif np.isclose(t_f_y, 0):  # movement only along x direction
+            res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f)
+            n = len(traj_x.T)
+            Y = np.repeat(np.array([[y_0]]), n, axis=0)
+            res, traj_y = True, traj_x, Trajectory(t_f=t_f_x, t_s=y_0, x_s=y_0, X=Y, U=np.zeros(n), S=np.zeros(n),
+                                                   T=traj_x.T)
+
+        elif np.isclose(t_f_x, t_f_y):  # x and y motion take same amount of time
+            res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f)
+            res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f)
+            return True, traj_x, traj_y
+
+        elif t_f_x < t_f_y:  # x motion is faster than y, adapt x to y's duration
+            res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f)
+
+            # case 1: bang bang with t_f_x
+            u_lim_new = self.di_x.control_limit_from_final_time(x_0=x_0, x_f=x_f, t_f=t_f_y, s_0=s_x0)
+            t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f, u_lim=u_lim_new)[1]
+            if np.isclose(t_f_x, t_f_y):
+                res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f, u_lim=u_lim_new)
+                return True, traj_x, traj_y
+
+            # case 2: inverted bang bang with t_f_y
+            u_lim_new = self.di_x.control_limit_from_final_time(x_0=x_0, x_f=x_f, t_f=t_f_y, s_0=-s_x0)
+            if 0 < u_lim_new < self.di_x.u_sys_lim:
+                t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f, u_lim=u_lim_new)[1]
                 if not np.isclose(t_f_x, t_f_y):
-                    return False, []
+                    res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f, u_lim=u_lim_new)
+                    return True, traj_x, traj_y
 
-            t_f_x, t_s_x, y_1s, y_2s, X, U_x, S_x, T_x = self.di_x.time_opt_control(x_10=x_10, x_20=x_20, x_1f=x_1f,
-                                                                                    x_2f=x_2f, u_lim=u_lim_new)
-            t_f_y, t_s_y, y_1s, y_2s, Y, U_y, S_y, T_y = self.di_y.time_opt_control(x_10=y_10, x_20=y_20, x_1f=y_1f,
-                                                                                    x_2f=y_2f)
-        elif t_f_x > t_f_y:
-            u_lim_new = self.di_y.comp_limit_from_final_time(x_10=y_10, x_20=y_20, x_1f=y_1f, x_2f=y_2f, t_f=t_f_x,
-                                                             s_0=s_y0)
-            t_f_y = self.di_x.optimal_controller(x_10=y_10, x_20=y_20, x_1f=y_1f, x_2f=y_2f, u_lim=u_lim_new)[1]
+            # case 3: energy optimal control with t_f_y
+            res, traj_x = self.di_x.energy_opt_control(x_0=x_0, x_f=x_f, t_f=t_f_y)
+            if res:
+                return True, traj_x, traj_y
 
-            if not np.isclose(t_f_x, t_f_y):
-                u_lim_new = self.di_y.comp_limit_from_final_time(x_10=y_10, x_20=y_20, x_1f=y_1f, x_2f=y_2f, t_f=t_f_x,
-                                                                 s_0=-s_y0)
-                if u_lim_new > 0 and u_lim_new < self.di_y.u_sys_lim:
-                    t_f_y = self.di_x.optimal_controller(x_10=y_10, x_20=y_20, x_1f=y_1f, x_2f=y_2f, u_lim=u_lim_new)[1]
+            # no feasible trajectory found
+            return False, None, None
+
+        elif t_f_x > t_f_y:  # y motion is faster than x, adapt y to x's duration
+            res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f)
+
+            # case 1: bang bang with t_f_x
+            u_lim_new = self.di_y.control_limit_from_final_time(x_0=y_0, x_f=y_f, t_f=t_f_x, s_0=s_y0)
+            t_f_y = self.di_x.time_optimal_solution(x_0=y_0, x_f=y_f, u_lim=u_lim_new)[1]
+            if np.isclose(t_f_x, t_f_y):
+                res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f, u_lim=u_lim_new)
+                return True, traj_x, traj_y
+
+            # case 2: inverted bang bang with t_f_x
+            u_lim_new = self.di_y.control_limit_from_final_time(x_0=y_0, x_f=y_f, t_f=t_f_x, s_0=-s_y0)
+            if 0 < u_lim_new < self.di_y.u_sys_lim:
+                t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f, u_lim=u_lim_new)[1]
                 if not np.isclose(t_f_x, t_f_y):
-                    return False, []
+                    res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f, u_lim=u_lim_new)
+                    return True, traj_x, traj_y
 
-            t_f_y, t_s_y, y_1s, y_2s, Y, U_y, S_y, T_y = self.di_y.time_opt_control(x_10=y_10, x_20=y_20, x_1f=y_1f,
-                                                                                    x_2f=y_2f, u_lim=u_lim_new)
-            t_f_x, t_s_x, y_1s, y_2s, X, U_x, S_x, T_x = self.di_x.time_opt_control(x_10=x_10, x_20=x_20, x_1f=x_1f,
-                                                                                    x_2f=x_2f)
+            # case 3: energy optimal control with t_f_x
+            res, traj_y = self.di_y.energy_opt_control(x_0=y_0, x_f=y_f, t_f=t_f_x)
+            if res:
+                return True, traj_x, traj_y
 
-        return True, [t_f_x, t_s_x, y_1s, y_2s, X, U_x, S_x, T_x, t_f_y, t_s_y, y_1s, y_2s, Y, U_y, S_y, T_y]
+            # no feasible trajectory found
+            return False, None, None
 
     def draw(self):
         pass

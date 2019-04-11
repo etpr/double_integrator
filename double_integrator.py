@@ -96,7 +96,7 @@ class DoubleIntegrator:
 
         return u_lim
 
-    def energy_optimal_solution(self, x_0, x_f, t_f, u_lim=None):
+    def fuel_optimal_solution(self, x_0, x_f, t_f, u_lim=None):
         if u_lim is not None:
             if u_lim > self.u_sys_lim:
                 raise Exception("the provided control limit is above the system limit")
@@ -150,7 +150,7 @@ class DoubleIntegrator:
 
         return s0, t_f, t_s, x_s, u_opt, u_max
 
-    def energy_opt_control(self, x_0, x_f, t_f, u_lim=None):
+    def fuel_opt_control(self, x_0, x_f, t_f, u_lim=None):
             if x_0[0] == x_f[0] and x_0[1] == x_f[1]:  # trivial case: start == goal
                 return True, Trajectory(t_f=0, t_s=0, x_s=x_0, X=np.array([x_0]), U=np.array([0]), S=np.array([0]),
                                         T=np.array([0]))
@@ -159,7 +159,7 @@ class DoubleIntegrator:
             if t_f < t_f_opt:
                 return False, []  # no solution: final time greater than minimum time
 
-            s0, t_f, t_s, x_s, u_opt, u_max = self.energy_optimal_solution(x_0, x_f, t_f, u_lim)
+            s0, t_f, t_s, x_s, u_opt, u_max = self.fuel_optimal_solution(x_0, x_f, t_f, u_lim)
 
             if np.isnan(t_s[0]) or np.isnan(t_s[1]) or t_s[0] > t_f or t_s[0] < 0 or t_s[1] < 0 or \
                 t_s[0] > t_s[1] or t_s[1] > t_f:  # no solution: switching times are unfeasible
@@ -210,17 +210,105 @@ class DoubleIntegrator:
 
             return True, Trajectory(t_f=t_f, t_s=t_s, x_s=x_s, X=X, U=U, S=S, T=T)
 
-    def draw(self, X, U):
-        import matplotlib.pyplot as plt
-        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(U, 0)), U > 0)
-        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'b')
-        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(U, 0)), U < 0)
-        plt.plot(X[plot_idx, 0], X[plot_idx, 1], 'r')
-        plt.plot(X[np.isclose(U, 0), 0], X[np.isclose(U, 0), 1], 'k')
+    def energy_optimal_solution(self, x_0, x_f, u_lim=None):
+        if u_lim is not None:
+            if u_lim > self.u_sys_lim:
+                raise Exception("the provided control limit is above the system limit")
+            u_max = u_lim
+            u_min = -u_lim
+        else:
+            u_max = self.u_sys_lim
+            u_min = -self.u_sys_lim
 
-    def animate(self, X, U, T):
+        s0 = self.switch_criteria(x_0, x_f, u_max)
+
+        if s0 > 0:
+            t_s = (x_0[1] + np.sqrt(0.5 * x_0[1] * x_0[1] + u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] - u_max * x_f[0])) / u_max
+            t_f = (x_0[1] + x_f[1] + 2 * np.sqrt(
+                0.5 * x_0[1] * x_0[1] + u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] - u_max * x_f[0])) / u_max
+            x_s = np.array([0.5 * t_s * t_s * u_min + x_0[1] * t_s + x_0[0], u_min * t_s + x_0[1]])
+            u_opt = [u_min, u_max]
+        elif s0 < 0:
+            t_s = (-x_0[1] + np.sqrt(0.5 * x_0[1] * x_0[1] - u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] + u_max * x_f[0])) / u_max
+            t_f = (-x_0[1] + -x_f[1] + 2 * np.sqrt(
+                0.5 * x_0[1] * x_0[1] - u_max * x_0[0] + 0.5 * x_f[1] * x_f[1] + u_max * x_f[0])) / u_max
+            x_s = np.array([0.5 * t_s * t_s * u_max + x_0[1] * t_s + x_0[0], u_max * t_s + x_0[1]])
+            u_opt = [u_max, u_min]
+        else:
+            t_s = 0
+            t_f = (np.abs(x_0[1]) + np.abs(x_f[1])) / u_max
+            x_s = np.copy(x_0)
+            u_opt = [-np.sign(x_0[1]) * u_max]
+
+        return s0, t_f, t_s, x_s, u_opt, u_max
+
+    def energy_opt_control(self, x_0, x_f, t_f, u_lim=None):
+        if x_0[0] == x_f[0] and x_0[1] == x_f[1]:  # trivial case: start == goal
+            return True, Trajectory(t_f=0, t_s=0, x_s=x_0, X=np.array([x_0]), U=np.array([0]), S=np.array([0]),
+                                    T=np.array([0]))
+
+        if u_lim is not None:
+            if u_lim > self.u_sys_lim:
+                raise Exception("the provided control limit is above the system limit")
+            u_max = u_lim
+            u_min = -u_lim
+        else:
+            u_max = self.u_sys_lim
+            u_min = -self.u_sys_lim
+
+        l_10 = (-0.5 * t_f * x_0[1] - 0.5 * t_f * x_f[1] - x_0[0] + x_f[0]) / (-1.0 / 12.0 * t_f ** 3)
+        l_20 = (0.5 * t_f ** 2 * l_10 + x_0[1] - x_f[1]) / t_f
+
+        # check if the optimal controller violates the control limits
+        if -l_20 > u_max or -l_20 < u_min or l_10 * t_f - l_20 > u_max or l_10 * t_f - l_20 < u_min:
+            return False, None
+
+        t = 0
+        x = np.copy(x_0)
+        u = np.max([np.min([-l_20, u_max]), u_min])
+
+        X = np.array([x_0])
+        U = np.array([u])
+        T = np.array([t])
+
+        while t <= t_f:
+            u = l_10 * t - l_20
+
+            # x[0] = x[0] + self.dt * x[1]
+            # x[1] = x[1] + self.dt * u
+            x[0] = 1/6 * t ** 3 * l_10 - 0.5 * l_20 * t ** 2 + x_0[1] * t + x_0[0]
+            x[1] = 0.5 * t ** 2 * l_10 - l_20 * t + x_0[1]
+
+            X = np.append(X, np.array([x]), axis=0)
+            U = np.append(U, u)
+            T = np.append(T, t)
+
+            t += self.dt
+
+        return True, Trajectory(t_f=t_f, X=X, U=U, T=T)
+
+
+class Trajectory:
+    def __init__(self, t_f=None, t_s=None, x_s=None, X=None, U=None, S=None, T=None):
+        self.t_f = t_f
+        self.t_s = t_s
+        self.x_s = x_s
+        self.X = X
+        self.U = U
+        self.S = S
+        self.T = T
+
+    def draw(self):
         import matplotlib.pyplot as plt
-        for x, u, t in zip(X, U, T):
+        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(self.U, 0)), self.U > 0)
+        plt.plot(self.X[plot_idx, 0], self.X[plot_idx, 1], 'b')
+        plot_idx = np.bitwise_and(np.bitwise_not(np.isclose(self.U, 0)), self.U < 0)
+        plt.plot(self.X[plot_idx, 0], self.X[plot_idx, 1], 'r')
+        plt.plot(self.X[np.isclose(self.U, 0), 0], self.X[np.isclose(self.U, 0), 1], 'k')
+
+    def animate(self):
+        import matplotlib.pyplot as plt
+        for x, u, t in zip(self.X, self.U, self.T):
             if np.isclose(u, 0):
                 plt.plot(x[0], x[1], 'k.')
             elif u > 0:
@@ -232,12 +320,7 @@ class DoubleIntegrator:
             plt.pause(1e-12)
 
 
-class Trajectory:
-    def __init__(self, t_f, t_s, x_s, X, U, S, T):
-        self.t_f = t_f
-        self.t_s = t_s
-        self.x_s = x_s
-        self.X = X
-        self.U = U
-        self.S = S
-        self.T = T
+
+
+
+

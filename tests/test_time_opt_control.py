@@ -2,8 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from double_integrator import DoubleIntegrator
 from random import random, seed
-
-N_RAND = 10
+from tests_configuration import *
 
 
 def test_simple():
@@ -22,15 +21,20 @@ def test_simple():
 
 
 def test_final_state():
+    success_count = 0
     for i in range(N_RAND):
+        np.random.seed(i)
         x_0 = np.random.rand(2) * 2.0 - 1.0
         x_f = np.random.rand(2) * 2.0 - 1.0
         u_lim = random() * 5.0 + 0.5
 
         di = DoubleIntegrator(dt=0.001, u_sys_lim=u_lim)
         res, traj = di.time_opt_control(x_0=x_0, x_f=x_f)
-        assert np.linalg.norm(x_f - traj.X[-1]) < 1e-2
-        assert traj.t_s < traj.t_f
+        if res:
+            success_count += 1
+            assert np.linalg.norm(x_f - traj.X[-1]) < 1e-2
+            assert traj.t_s < traj.t_f
+    print('time optimal control success rate : ', success_count, ' / ', N_RAND)
 
 
 def test_equal_start_end():

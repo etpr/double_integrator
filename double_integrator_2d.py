@@ -7,7 +7,38 @@ class DoubleIntegrator2D:
         self.di_x = DoubleIntegrator(u_sys_lim, dt)
         self.di_y = DoubleIntegrator(u_sys_lim, dt)
 
-    def steer(self, x_0, x_f, y_0, y_f):
+    def steer_energy_opt(self, x_0, x_f, y_0, y_f):
+        s_x0, t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f)[0:2]
+        s_y0, t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f)[0:2]
+
+        t_f = np.max(np.array([t_f_x, t_f_y]))
+        t_f_min = t_f
+        t_f_max = t_f * 5.0
+        res_x = self.di_x.energy_optimal_solution(x_0=x_0, x_f=x_f, t_f=t_f_max)[0]
+        res_y = self.di_y.energy_optimal_solution(x_0=y_0, x_f=y_f, t_f=t_f_max)[0]
+
+        if not (res_x and res_y):
+            return False, None, None
+
+        # binary search to find shortest feasible duration
+        n_iter = 10
+        for i in range(n_iter):
+            t_f_i = (t_f_max + t_f_min) / 2.0
+            res_x = self.di_x.energy_optimal_solution(x_0=x_0, x_f=x_f, t_f=t_f_i)[0]
+            res_y = self.di_y.energy_optimal_solution(x_0=y_0, x_f=y_f, t_f=t_f_i)[0]
+
+            if res_x and res_y:
+                t_f_max = t_f_i
+            else:
+                t_f_min = t_f_i
+
+        t_f_opt = t_f_max
+        res_x, traj_x = self.di_x.energy_opt_control(x_0=x_0, x_f=x_f, t_f=t_f_opt)
+        res_y, traj_y = self.di_y.energy_opt_control(x_0=y_0, x_f=y_f, t_f=t_f_opt)
+
+        return True, traj_x, traj_y
+
+    def steer_time_opt(self, x_0, x_f, y_0, y_f):
         s_x0, t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f)[0:2]
         s_y0, t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f)[0:2]
 
@@ -46,16 +77,11 @@ class DoubleIntegrator2D:
             u_lim_new = self.di_x.control_limit_from_final_time(x_0=x_0, x_f=x_f, t_f=t_f_y, s_0=-s_x0)
             if 0 < u_lim_new < self.di_x.u_sys_lim:
                 t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f, u_lim=u_lim_new)[1]
-                if not np.isclose(t_f_x, t_f_y):
+                if np.isclose(t_f_x, t_f_y):
                     res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f, u_lim=u_lim_new)
                     return True, traj_x, traj_y
 
-            # case 3: energy optimal control with t_f_y
-            res, traj_x = self.di_x.energy_opt_control(x_0=x_0, x_f=x_f, t_f=t_f_y)
-            if res:
-                return True, traj_x, traj_y
-
-            # case 4: fuel optimal control with t_f_y
+            # case 3: fuel optimal control [bang-zero-bang with t_f_y
             res, traj_x = self.di_x.fuel_opt_control(x_0=x_0, x_f=x_f, t_f=t_f_y)
             if res:
                 return True, traj_x, traj_y
@@ -77,16 +103,11 @@ class DoubleIntegrator2D:
             u_lim_new = self.di_y.control_limit_from_final_time(x_0=y_0, x_f=y_f, t_f=t_f_x, s_0=-s_y0)
             if 0 < u_lim_new < self.di_y.u_sys_lim:
                 t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f, u_lim=u_lim_new)[1]
-                if not np.isclose(t_f_x, t_f_y):
+                if np.isclose(t_f_x, t_f_y):
                     res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f, u_lim=u_lim_new)
                     return True, traj_x, traj_y
 
-            # case 3: energy optimal control with t_f_x
-            res, traj_y = self.di_y.energy_opt_control(x_0=y_0, x_f=y_f, t_f=t_f_x)
-            if res:
-                return True, traj_x, traj_y
-
-            # case 4: fuel optimal control with t_f_x
+            # case 3: fuel optimal control with t_f_x
             res, traj_y = self.di_y.fuel_opt_control(x_0=y_0, x_f=y_f, t_f=t_f_x)
             if res:
                 return True, traj_x, traj_y
@@ -110,10 +131,8 @@ class DoubleIntegrator2D:
         delta = 0.1
         plt.plot(traj_x.x_0[0], traj_y.x_0[0], '.c')
         plt.plot(traj_x.x_f[0], traj_y.x_f[0], '.g')
-        plt.arrow(traj_x.x_0[0], traj_y.x_0[0], traj_x.x_0[1],
-                  delta * (traj_y.x_0[1] - traj_y.x_0[0]), color='c', width=0.01)
-        plt.arrow(traj_x.x_f[0], traj_y.x_f[0], delta * traj_x.x_f[1],
-                  delta * traj_y.x_f[1], color='g', width=0.01)
+        plt.arrow(traj_x.x_0[0], traj_y.x_0[0], delta * traj_x.x_0[1], delta * traj_y.x_0[1], color='c', width = 0.01)
+        plt.arrow(traj_x.x_f[0], traj_y.x_f[0], delta * traj_x.x_f[1], delta * traj_y.x_f[1], color='g', width=0.01)
 
     def plot_traj(self, traj_x, traj_y):
         traj_x.plot_traj()

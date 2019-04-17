@@ -7,6 +7,12 @@ class DoubleIntegrator2D:
         self.di_x = DoubleIntegrator(u_sys_lim, dt)
         self.di_y = DoubleIntegrator(u_sys_lim, dt)
 
+    def time_opt_metric(self, x_0, x_f, y_0, y_f):
+        t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f)[1]
+        t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f)[1]
+
+        return np.max([t_f_x, t_f_y])
+
     def steer_energy_opt(self, x_0, x_f, y_0, y_f):
         s_x0, t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f)[0:2]
         s_y0, t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f)[0:2]
@@ -42,21 +48,25 @@ class DoubleIntegrator2D:
         s_x0, t_f_x = self.di_x.time_optimal_solution(x_0=x_0, x_f=x_f)[0:2]
         s_y0, t_f_y = self.di_y.time_optimal_solution(x_0=y_0, x_f=y_f)[0:2]
 
-        if np.isclose(t_f_x, 0):  # movement only along y direction
+        if np.isclose(t_f_x, 0) and np.isclose(t_f_y, 0):  # trivial case: start==goal
+            traj_x = Trajectory(t_f=0, t_s=0, x_s=x_0, x_0=x_0, x_f=x_f, X=np.array([y_f]), U=np.zeros(1), S=np.zeros(1),
+                                T=np.zeros(1))
+            traj_y = Trajectory(t_f=0, t_s=0, x_s=y_0, x_0=y_0, x_f=y_f, X=np.array([y_f]), U=np.zeros(1), S=np.zeros(1),
+                                T=np.zeros(1))
+            return True, traj_x, traj_y
+        elif np.isclose(t_f_x, 0):  # movement only along y direction
             res, traj_y = self.di_y.time_opt_control(x_0=y_0, x_f=y_f)
             n = len(traj_y.T)
-            X = np.repeat(np.array([[x_0]]), n, axis=0)
-            traj_x = Trajectory(t_f=t_f_y, t_s=0, x_s=y_0, x_0=x_0, x_f=x_f, X=X, U=np.zeros(n), S=np.zeros(n),
-                                           T=traj_y.T)
-            res, traj_x = True, traj_x, traj_y
+            X = np.repeat(np.array([x_0]), n, axis=0)
+            traj_x = Trajectory(t_f=t_f_y, t_s=0, x_s=y_0, x_0=x_0, x_f=x_f, X=X, U=np.zeros(n), S=np.zeros(n), T=traj_y.T)
+            return True, traj_x, traj_y
 
         elif np.isclose(t_f_y, 0):  # movement only along x direction
             res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f)
             n = len(traj_x.T)
-            Y = np.repeat(np.array([[y_0]]), n, axis=0)
-            traj_y = Trajectory(t_f=t_f_x, t_s=0, x_s=y_0, x_0=y_0, x_f=y_f, X=Y, U=np.zeros(n), S=np.zeros(n),
-                                                   T=traj_x.T)
-            res, traj_y = True, traj_x, traj_y
+            Y = np.repeat(np.array([y_0]), n, axis=0)
+            traj_y = Trajectory(t_f=t_f_x, t_s=0, x_s=y_0, x_0=y_0, x_f=y_f, X=Y, U=np.zeros(n), S=np.zeros(n), T=traj_x.T)
+            return True, traj_x, traj_y
 
         elif np.isclose(t_f_x, t_f_y):  # x and y motion take same amount of time
             res, traj_x = self.di_x.time_opt_control(x_0=x_0, x_f=x_f)

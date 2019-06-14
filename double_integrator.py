@@ -238,7 +238,7 @@ class DoubleIntegrator:
 
 
     def energy_opt_control(self, x_0, x_f, t_f, u_lim=None):
-        feasible, l_10, l_20, u_max = self.energy_optimal_solution(x_0, x_f, t_f, u_lim=None)
+        feasible, l_10, l_20, u_max = self.energy_optimal_solution(x_0, x_f, t_f, u_lim=u_lim)
 
         # check if the optimal controller violates the control limits
         if not feasible:

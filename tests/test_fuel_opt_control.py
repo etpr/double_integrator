@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from double_integrator import DoubleIntegrator
 from random import random, seed
-from tests_configuration import *
+from tests.tests_configuration import *
 
 
 def test_simple():

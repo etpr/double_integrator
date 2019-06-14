@@ -338,8 +338,9 @@ class Trajectory:
             plt.draw()
             plt.pause(1e-12)
 
-
-
+    def __str__(self):
+        s = 'Trajecotry(N = %d, t_f = %f, x_0 = %s, x_f = %s)' % (len(self.X), self.t_f, str(self.x_0), str(self.x_f))
+        return s
 
 
 

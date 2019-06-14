@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from double_integrator import DoubleIntegrator
-from tests_configuration import *
+from tests.tests_configuration import *
 
 
 def test_visualization():
